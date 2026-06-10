@@ -80,6 +80,21 @@ usersRouter.delete(
 
       await pool.query("DELETE FROM users WHERE id = $1", [userId]);
 
+      try {
+        const canteenRes = await fetch(`${process.env.CANTEEN_API_URL}/users/sync/${userId}`, {
+          method: "DELETE",
+          headers: {
+            "x-api-key": process.env.MIDDEN_API_KEY,
+          },
+        });
+
+        if (!canteenRes.ok && canteenRes.status !== 404) {
+          console.error("Failed to sync user deletion to Canteen:", await canteenRes.text());
+        }
+      } catch (err) {
+        console.error("Error syncing user deletion to Canteen:", err);
+      }
+
       res.json({ message: "User deleted successfully" });
     } catch (err) {
       console.error(err);
