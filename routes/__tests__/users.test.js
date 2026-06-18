@@ -114,6 +114,13 @@ describe('Users API', () => {
   describe('DELETE /users/:id', () => {
     it('should delete a user successfully', async () => {
       const userId = 123;
+      global.fetch = jest.fn(() =>
+        Promise.resolve({
+          ok: true,
+          status: 200,
+          json: () => Promise.resolve({}),
+        })
+      );
 
       // Mock 1: User lookup (Not Admin)
       mockQuery.mockResolvedValueOnce({
@@ -129,6 +136,10 @@ describe('Users API', () => {
       expect(res.status).toBe(200);
       expect(res.body.message).toBe('User deleted successfully');
       expect(mockQuery).toHaveBeenCalledTimes(2);
+      expect(global.fetch).toHaveBeenCalledWith(
+        expect.stringContaining(`/users/sync/${userId}`),
+        expect.objectContaining({ method: 'DELETE' })
+      );
     });
 
     it('should return 403 when deleting an Admin', async () => {
