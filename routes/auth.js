@@ -112,7 +112,7 @@ authRouter.post("/login", async (req, res) => {
 
     const tempToken = jwt.sign(
       { id: user.id, purpose: "2fa" },
-      process.env.JWT_SECRET || "dev_secret_key",
+      process.env.JWT_SECRET,
       { expiresIn: "10m" }
     );
 
@@ -136,7 +136,7 @@ authRouter.post("/verify-2fa", async (req, res) => {
   
   let userId;
   try {
-    const decoded = jwt.verify(tempToken, process.env.JWT_SECRET || "dev_secret_key");
+    const decoded = jwt.verify(tempToken, process.env.JWT_SECRET);
     userId = decoded.id;
   } catch (err) {
     return res.status(401).json({ error: "Invalid or expired temporary token" });
@@ -182,7 +182,7 @@ authRouter.post("/verify-2fa", async (req, res) => {
         role: user.role,
         permissions: user.permissions,
       },
-      process.env.JWT_SECRET || "dev_secret_key",
+      process.env.JWT_SECRET,
       { expiresIn },
     );
 
