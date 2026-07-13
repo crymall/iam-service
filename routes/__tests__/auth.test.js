@@ -36,6 +36,9 @@ describe('Auth API', () => {
     jest.clearAllMocks();
     process.env.JWT_SECRET = 'test_secret';
     process.env.EMAIL_USER = 'test@example.com';
+    // Unset by default so register tests don't attempt real sub-app pushes;
+    // the push test below opts in with its own value and fetch mock.
+    delete process.env.USER_SYNC_API_URLS;
   });
 
   describe('POST /register', () => {
@@ -80,6 +83,75 @@ describe('Auth API', () => {
       await request(app).post('/register').send(userData);
       
       expect(mockQuery.mock.calls[1][1][3]).toBe(viewerRoleId);
+    });
+
+    it('should push the new user to every configured sub-app', async () => {
+      process.env.USER_SYNC_API_URLS = 'http://canteen.test,http://netbook.test';
+      global.fetch = jest.fn(() =>
+        Promise.resolve({
+          ok: true,
+          status: 201,
+          json: () => Promise.resolve({}),
+        })
+      );
+
+      const userData = {
+        username: faker.internet.userName(),
+        email: faker.internet.email(),
+        password: faker.internet.password(),
+      };
+      const newUserId = faker.string.uuid();
+
+      // Mock 1: Role lookup
+      mockQuery.mockResolvedValueOnce({ rows: [{ id: 2 }] });
+
+      // Mock 2: User insertion
+      mockQuery.mockResolvedValueOnce({
+        rows: [{ id: newUserId, username: userData.username, email: userData.email }],
+      });
+
+      const res = await request(app).post('/register').send(userData);
+
+      expect(res.status).toBe(201);
+      expect(global.fetch).toHaveBeenCalledTimes(2);
+      for (const baseUrl of ['http://canteen.test', 'http://netbook.test']) {
+        expect(global.fetch).toHaveBeenCalledWith(
+          `${baseUrl}/users`,
+          expect.objectContaining({
+            method: 'POST',
+            body: JSON.stringify({ username: userData.username, iam_id: newUserId }),
+          })
+        );
+      }
+    });
+
+    it('should still register when a sub-app push fails', async () => {
+      process.env.USER_SYNC_API_URLS = 'http://canteen.test';
+      const originalError = console.error;
+      const consoleSpy = jest.spyOn(console, 'error').mockImplementation((msg, ...args) => {
+        if (typeof msg === 'string' && msg.startsWith('Error syncing user to')) return;
+        originalError.call(console, msg, ...args);
+      });
+      global.fetch = jest.fn(() => Promise.reject(new Error('sub-app down')));
+
+      const userData = {
+        username: faker.internet.userName(),
+        email: faker.internet.email(),
+        password: faker.internet.password(),
+      };
+
+      // Mock 1: Role lookup
+      mockQuery.mockResolvedValueOnce({ rows: [{ id: 2 }] });
+
+      // Mock 2: User insertion
+      mockQuery.mockResolvedValueOnce({
+        rows: [{ id: faker.string.uuid(), username: userData.username, email: userData.email }],
+      });
+
+      const res = await request(app).post('/register').send(userData);
+
+      expect(res.status).toBe(201);
+      consoleSpy.mockRestore();
     });
 
     it('should return 409 if user already exists', async () => {
