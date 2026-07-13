@@ -9,7 +9,7 @@ jest.unstable_mockModule('jsonwebtoken', () => ({
   },
 }));
 
-const { authenticateToken, authorizePermissions } = await import('../authorize.js');
+const { authenticateToken, authenticateApiKey, authorizePermissions } = await import('../authorize.js');
 
 describe('Authorization Middleware', () => {
   let req, res, next;
@@ -62,6 +62,39 @@ describe('Authorization Middleware', () => {
       authenticateToken(req, res, next);
 
       expect(req.user).toEqual(mockUser);
+      expect(next).toHaveBeenCalled();
+      expect(res.status).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('authenticateApiKey', () => {
+    beforeEach(() => {
+      req.headers = {};
+      process.env.MIDDEN_API_KEY = 'test_api_key';
+    });
+
+    it('should return 401 if no api key is provided', () => {
+      authenticateApiKey(req, res, next);
+
+      expect(res.status).toHaveBeenCalledWith(401);
+      expect(res.json).toHaveBeenCalledWith({ error: "Access Denied: Invalid API Key" });
+      expect(next).not.toHaveBeenCalled();
+    });
+
+    it('should return 401 if the api key is wrong', () => {
+      req.headers['x-api-key'] = 'wrong_key';
+
+      authenticateApiKey(req, res, next);
+
+      expect(res.status).toHaveBeenCalledWith(401);
+      expect(next).not.toHaveBeenCalled();
+    });
+
+    it('should call next() if the api key matches', () => {
+      req.headers['x-api-key'] = 'test_api_key';
+
+      authenticateApiKey(req, res, next);
+
       expect(next).toHaveBeenCalled();
       expect(res.status).not.toHaveBeenCalled();
     });

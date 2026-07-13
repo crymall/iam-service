@@ -17,6 +17,19 @@ export const authenticateToken = (req, res, next) => {
   });
 };
 
+// Machine-to-machine auth for the sync surface, matching the sub-apps'
+// x-api-key convention (canteen's authenticateApiKey, netbook's ApiKeyAttribute).
+export const authenticateApiKey = (req, res, next) => {
+  const apiKey = req.headers["x-api-key"];
+  const expected = process.env.MIDDEN_API_KEY || "dev_api_key";
+
+  if (!apiKey || apiKey !== expected) {
+    return res.status(401).json({ error: "Access Denied: Invalid API Key" });
+  }
+
+  next();
+};
+
 export const authorizePermissions = (requiredPermission) => {
   return (req, res, next) => {
     if (!req.user) {

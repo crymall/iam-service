@@ -14,6 +14,7 @@ jest.unstable_mockModule('../../config/db.js', () => ({
 // We assume the user is authenticated for these unit tests.
 jest.unstable_mockModule('../../middleware/authorize.js', () => ({
   authenticateToken: (req, res, next) => next(),
+  authenticateApiKey: (req, res, next) => next(),
   authorizePermissions: (permission) => (req, res, next) => next(),
 }));
 
@@ -30,6 +31,44 @@ const request = (await import('supertest')).default;
 describe('Users API', () => {
   beforeEach(() => {
     jest.clearAllMocks();
+    process.env.USER_SYNC_API_URLS = 'http://canteen.test';
+  });
+
+  describe('GET /users/sync', () => {
+    it('should return the machine-readable user list', async () => {
+      const mockUsers = [
+        { id: faker.string.uuid(), username: faker.internet.userName() },
+        { id: faker.string.uuid(), username: faker.internet.userName() },
+      ];
+
+      mockQuery.mockResolvedValueOnce({ rows: mockUsers });
+
+      const res = await request(app).get('/users/sync');
+
+      expect(res.status).toBe(200);
+      expect(res.body.users).toHaveLength(2);
+      expect(res.body.users[0]).toHaveProperty('id', mockUsers[0].id);
+      expect(res.body.users[0]).toHaveProperty('username', mockUsers[0].username);
+      expect(mockQuery).toHaveBeenCalledWith(
+        expect.stringContaining('SELECT id, username'),
+      );
+    });
+
+    it('should handle database errors', async () => {
+      const originalError = console.error;
+      const consoleSpy = jest.spyOn(console, 'error').mockImplementation((err, ...args) => {
+        if (err && err.message === 'DB Error') return;
+        originalError.call(console, err, ...args);
+      });
+
+      mockQuery.mockRejectedValueOnce(new Error('DB Error'));
+
+      const res = await request(app).get('/users/sync');
+
+      expect(res.status).toBe(500);
+      expect(res.body).toHaveProperty('error', 'Database error');
+      consoleSpy.mockRestore();
+    });
   });
 
   describe('GET /users', () => {
@@ -138,6 +177,34 @@ describe('Users API', () => {
       expect(mockQuery).toHaveBeenCalledTimes(2);
       expect(global.fetch).toHaveBeenCalledWith(
         expect.stringContaining(`/users/sync/${userId}`),
+        expect.objectContaining({ method: 'DELETE' })
+      );
+    });
+
+    it('should propagate deletion to every configured sub-app', async () => {
+      const userId = 456;
+      process.env.USER_SYNC_API_URLS = 'http://canteen.test,http://netbook.test';
+      global.fetch = jest.fn(() =>
+        Promise.resolve({
+          ok: true,
+          status: 200,
+          json: () => Promise.resolve({}),
+        })
+      );
+
+      mockQuery.mockResolvedValueOnce({ rowCount: 1, rows: [{ name: 'User' }] });
+      mockQuery.mockResolvedValueOnce({});
+
+      const res = await request(app).delete(`/users/${userId}`);
+
+      expect(res.status).toBe(200);
+      expect(global.fetch).toHaveBeenCalledTimes(2);
+      expect(global.fetch).toHaveBeenCalledWith(
+        `http://canteen.test/users/sync/${userId}`,
+        expect.objectContaining({ method: 'DELETE' })
+      );
+      expect(global.fetch).toHaveBeenCalledWith(
+        `http://netbook.test/users/sync/${userId}`,
         expect.objectContaining({ method: 'DELETE' })
       );
     });

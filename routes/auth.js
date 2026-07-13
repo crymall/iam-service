@@ -5,6 +5,7 @@ import pool from "../config/db.js";
 import crypto from "crypto";
 import nodemailer from "nodemailer";
 import { authenticateToken } from "../middleware/authorize.js";
+import { syncUserToSubApps } from "../services/userSync.js";
 
 const authRouter = express.Router();
 
@@ -51,25 +52,7 @@ authRouter.post("/register", async (req, res) => {
 
     const newUser = result.rows[0];
 
-    try {
-      const canteenRes = await fetch(`${process.env.CANTEEN_API_URL}/users`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "x-api-key": process.env.MIDDEN_API_KEY,
-        },
-        body: JSON.stringify({
-          username: newUser.username,
-          iam_id: newUser.id,
-        }),
-      });
-
-      if (!canteenRes.ok) {
-        console.error("Failed to sync user to Canteen:", await canteenRes.text());
-      }
-    } catch (err) {
-      console.error("Error syncing user to Canteen:", err);
-    }
+    await syncUserToSubApps(newUser);
 
     res.status(201).json({ message: "User registered", user: newUser });
   } catch (err) {

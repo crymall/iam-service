@@ -1,12 +1,27 @@
 import express from "express";
 import pool from "../config/db.js";
 import {
+  authenticateApiKey,
   authenticateToken,
   authorizePermissions,
 } from "../middleware/authorize.js";
+import { syncUserDeletionToSubApps } from "../services/userSync.js";
 
 const usersRouter = express.Router();
 
+// Machine-readable user list for the sync-users backfill script in
+// midden-infra. Registered before /:id so "sync" isn't captured as an id.
+usersRouter.get("/sync", authenticateApiKey, async (req, res) => {
+  try {
+    const result = await pool.query(
+      "SELECT id, username FROM users ORDER BY username ASC",
+    );
+    res.json({ users: result.rows });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: "Database error" });
+  }
+});
 
 usersRouter.get(
   "/",
@@ -80,20 +95,7 @@ usersRouter.delete(
 
       await pool.query("DELETE FROM users WHERE id = $1", [userId]);
 
-      try {
-        const canteenRes = await fetch(`${process.env.CANTEEN_API_URL}/users/sync/${userId}`, {
-          method: "DELETE",
-          headers: {
-            "x-api-key": process.env.MIDDEN_API_KEY,
-          },
-        });
-
-        if (!canteenRes.ok && canteenRes.status !== 404) {
-          console.error("Failed to sync user deletion to Canteen:", await canteenRes.text());
-        }
-      } catch (err) {
-        console.error("Error syncing user deletion to Canteen:", err);
-      }
+      await syncUserDeletionToSubApps(userId);
 
       res.json({ message: "User deleted successfully" });
     } catch (err) {
