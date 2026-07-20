@@ -38,3 +38,13 @@ spec:
             name: iam-service
             port:
               number: 3000
+  - host: netbook.reedgaines.com
+    http:
+      paths:
+      - path: /iam(/|$)(.*)
+        pathType: ImplementationSpecific
+        backend:
+          service:
+            name: iam-service
+            port:
+              number: 3000
