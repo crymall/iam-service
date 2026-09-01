@@ -6,7 +6,8 @@ Runs on port 3000 locally; the other apps reach it through the `/iam` path prefi
 
 ## Logging in locally
 
-Login is two steps: `POST /auth/login` with username and password returns a `temp_token`, then `POST /auth/verify-login` exchanges that token plus a six-digit code for the session cookie.
+Login is two steps: `POST /login` with username and password returns a `temp_token`, then `POST /verify-2fa` exchanges that token plus a six-digit code for the session cookie.
+The auth router mounts at the service root, so through the `/iam` prefix these are `POST /iam/login` and `POST /iam/verify-2fa` — the pair `shared/core/services/iamApi.js` in midden-hub calls.
 
 Locally there is no mail server, so **the second factor is not emailed — it is printed to this service's own console**:
 

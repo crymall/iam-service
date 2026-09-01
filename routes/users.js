@@ -6,6 +6,14 @@ import {
   authorizePermissions,
 } from "../middleware/authorize.js";
 import { syncUserDeletionToSubApps } from "../services/userSync.js";
+import {
+  usersForSyncQuery,
+  usersWithRolesQuery,
+  userWithRoleQuery,
+  userRoleNameQuery,
+  deleteUserQuery,
+  updateUserRoleQuery,
+} from "./utils/queries/users.js";
 
 const usersRouter = express.Router();
 
@@ -13,9 +21,7 @@ const usersRouter = express.Router();
 // midden-infra. Registered before /:id so "sync" isn't captured as an id.
 usersRouter.get("/sync", authenticateApiKey, async (req, res) => {
   try {
-    const result = await pool.query(
-      "SELECT id, username FROM users ORDER BY username ASC",
-    );
+    const result = await pool.query(usersForSyncQuery());
     res.json({ users: result.rows });
   } catch (err) {
     console.error(err);
@@ -28,13 +34,7 @@ usersRouter.get(
   authenticateToken,
   async (req, res) => {
     try {
-      const query = `
-        SELECT u.id, u.username, u.email, r.name as role 
-        FROM users u 
-        JOIN roles r ON u.role_id = r.id 
-        ORDER BY u.id ASC;
-      `;
-      const result = await pool.query(query);
+      const result = await pool.query(usersWithRolesQuery());
       res.json({ users: result.rows });
     } catch (err) {
       console.error(err);
@@ -50,13 +50,7 @@ usersRouter.get(
     const userId = req.params.id;
 
     try {
-      const query = `
-        SELECT u.id, u.username, u.email, r.name as role 
-        FROM users u 
-        JOIN roles r ON u.role_id = r.id 
-        WHERE u.id = $1;
-      `;
-      const result = await pool.query(query, [userId]);
+      const result = await pool.query(userWithRoleQuery(userId));
 
       if (result.rowCount === 0) {
         return res.status(404).json({ error: "User not found" });
@@ -78,12 +72,7 @@ usersRouter.delete(
     const userId = req.params.id;
 
     try {
-      const userRes = await pool.query(
-        `SELECT r.name FROM users u
-         LEFT JOIN roles r ON u.role_id = r.id
-         WHERE u.id = $1`,
-        [userId],
-      );
+      const userRes = await pool.query(userRoleNameQuery(userId));
 
       if (userRes.rowCount === 0) {
         return res.status(404).json({ error: "User not found" });
@@ -93,7 +82,7 @@ usersRouter.delete(
         return res.status(403).json({ error: "Cannot delete an Admin user" });
       }
 
-      await pool.query("DELETE FROM users WHERE id = $1", [userId]);
+      await pool.query(deleteUserQuery(userId));
 
       await syncUserDeletionToSubApps(userId);
 
@@ -118,12 +107,7 @@ usersRouter.patch(
     }
 
     try {
-      const userRes = await pool.query(
-        `SELECT r.name FROM users u
-         LEFT JOIN roles r ON u.role_id = r.id
-         WHERE u.id = $1`,
-        [userId],
-      );
+      const userRes = await pool.query(userRoleNameQuery(userId));
 
       if (userRes.rowCount === 0) {
         return res.status(404).json({ error: "User not found" });
@@ -133,7 +117,7 @@ usersRouter.patch(
         return res.status(403).json({ error: "Cannot modify role of an Admin user" });
       }
 
-      await pool.query("UPDATE users SET role_id = $1 WHERE id = $2", [roleId, userId]);
+      await pool.query(updateUserRoleQuery(userId, roleId));
 
       res.json({ message: "User role updated" });
     } catch (err) {
