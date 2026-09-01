@@ -28,6 +28,9 @@ jest.unstable_mockModule('../auth.js', () => ({
 const { default: app } = await import('../../app.js');
 const request = (await import('supertest')).default;
 
+const EXISTING_USER_ID = '11111111-1111-4111-8111-111111111111';
+const ABSENT_USER_ID = '99999999-9999-4999-8999-999999999999';
+
 describe('Users API', () => {
   beforeEach(() => {
     jest.clearAllMocks();
@@ -67,7 +70,7 @@ describe('Users API', () => {
       const res = await request(app).get('/users/sync');
 
       expect(res.status).toBe(500);
-      expect(res.body).toHaveProperty('error', 'Database error');
+      expect(res.body).toHaveProperty('error', 'Internal Server Error');
       consoleSpy.mockRestore();
     });
   });
@@ -105,7 +108,7 @@ describe('Users API', () => {
       const res = await request(app).get('/users');
 
       expect(res.status).toBe(500);
-      expect(res.body).toHaveProperty('error', 'Database error');
+      expect(res.body).toHaveProperty('error', 'Internal Server Error');
       consoleSpy.mockRestore();
     });
   });
@@ -121,20 +124,20 @@ describe('Users API', () => {
 
       mockQuery.mockResolvedValueOnce({ rowCount: 1, rows: [mockUser] });
 
-      const res = await request(app).get('/users/1');
+      const res = await request(app).get(`/users/${EXISTING_USER_ID}`);
 
       expect(res.status).toBe(200);
       expect(res.body.user).toHaveProperty('username', mockUser.username);
       expect(mockQuery).toHaveBeenCalledWith({
         text: expect.stringContaining('WHERE u.id = $1'),
-        values: ['1'],
+        values: [EXISTING_USER_ID],
       });
     });
 
     it('should return 404 if user not found', async () => {
       mockQuery.mockResolvedValueOnce({ rowCount: 0, rows: [] });
 
-      const res = await request(app).get('/users/999');
+      const res = await request(app).get(`/users/${ABSENT_USER_ID}`);
 
       expect(res.status).toBe(404);
       expect(res.body.error).toBe('User not found');
@@ -149,17 +152,17 @@ describe('Users API', () => {
 
       mockQuery.mockRejectedValueOnce(new Error('DB Error'));
 
-      const res = await request(app).get('/users/1');
+      const res = await request(app).get(`/users/${EXISTING_USER_ID}`);
 
       expect(res.status).toBe(500);
-      expect(res.body.error).toBe('Database error');
+      expect(res.body.error).toBe('Internal Server Error');
       consoleSpy.mockRestore();
     });
   });
 
   describe('DELETE /users/:id', () => {
     it('should delete a user successfully', async () => {
-      const userId = 123;
+      const userId = '12300000-0000-4000-8000-000000000123';
       global.fetch = jest.fn(() =>
         Promise.resolve({
           ok: true,
@@ -189,7 +192,7 @@ describe('Users API', () => {
     });
 
     it('should propagate deletion to every configured sub-app', async () => {
-      const userId = 456;
+      const userId = '45600000-0000-4000-8000-000000000456';
       process.env.USER_SYNC_API_URLS = 'http://canteen.test,http://netbook.test';
       global.fetch = jest.fn(() =>
         Promise.resolve({
@@ -223,7 +226,7 @@ describe('Users API', () => {
         rows: [{ name: 'Admin' }],
       });
 
-      const res = await request(app).delete('/users/1');
+      const res = await request(app).delete(`/users/${EXISTING_USER_ID}`);
 
       expect(res.status).toBe(403);
       expect(res.body.error).toBe('Cannot delete an Admin user');
@@ -233,7 +236,7 @@ describe('Users API', () => {
       // Mock 1: User lookup (Not found)
       mockQuery.mockResolvedValueOnce({ rowCount: 0, rows: [] });
 
-      const res = await request(app).delete('/users/999');
+      const res = await request(app).delete(`/users/${ABSENT_USER_ID}`);
 
       expect(res.status).toBe(404);
       expect(res.body.error).toBe('User not found');
@@ -242,7 +245,7 @@ describe('Users API', () => {
 
   describe('PATCH /users/:id/role', () => {
     it('should update user role successfully', async () => {
-      const userId = 1;
+      const userId = EXISTING_USER_ID;
       const newRoleId = 2;
 
       // Mock 1: Check user existence and current role (Not Admin)
@@ -264,7 +267,7 @@ describe('Users API', () => {
     });
 
     it('should return 400 if roleId is missing', async () => {
-      const res = await request(app).patch('/users/1/role').send({});
+      const res = await request(app).patch(`/users/${EXISTING_USER_ID}/role`).send({});
       expect(res.status).toBe(400);
       expect(res.body.error).toBe('roleId is required');
     });
@@ -277,7 +280,7 @@ describe('Users API', () => {
       });
 
       const res = await request(app)
-        .patch('/users/1/role')
+        .patch(`/users/${EXISTING_USER_ID}/role`)
         .send({ roleId: 2 });
 
       expect(res.status).toBe(403);
@@ -291,7 +294,7 @@ describe('Users API', () => {
       mockQuery.mockResolvedValueOnce({ rowCount: 0, rows: [] });
 
       const res = await request(app)
-        .patch('/users/999/role')
+        .patch(`/users/${ABSENT_USER_ID}/role`)
         .send({ roleId: 2 });
 
       expect(res.status).toBe(404);

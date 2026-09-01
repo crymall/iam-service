@@ -7,6 +7,7 @@ import promBundle from "express-prom-bundle";
 
 import authRouter from "./routes/auth.js";
 import usersRouter from "./routes/users.js";
+import { errorHandler } from "./middleware/errorHandler.js";
 
 const app = express();
 
@@ -45,5 +46,7 @@ app.use(limiter);
 
 app.use("/users", usersRouter);
 app.use("/", authRouter);
+
+app.use(errorHandler);
 
 export default app;
