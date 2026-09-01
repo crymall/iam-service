@@ -67,7 +67,7 @@ describe('Users API', () => {
       const res = await request(app).get('/users/sync');
 
       expect(res.status).toBe(500);
-      expect(res.body).toHaveProperty('error', 'Database error');
+      expect(res.body).toHaveProperty('error', 'Internal Server Error');
       consoleSpy.mockRestore();
     });
   });
@@ -105,7 +105,7 @@ describe('Users API', () => {
       const res = await request(app).get('/users');
 
       expect(res.status).toBe(500);
-      expect(res.body).toHaveProperty('error', 'Database error');
+      expect(res.body).toHaveProperty('error', 'Internal Server Error');
       consoleSpy.mockRestore();
     });
   });
@@ -152,7 +152,7 @@ describe('Users API', () => {
       const res = await request(app).get('/users/1');
 
       expect(res.status).toBe(500);
-      expect(res.body.error).toBe('Database error');
+      expect(res.body.error).toBe('Internal Server Error');
       consoleSpy.mockRestore();
     });
   });

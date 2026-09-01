@@ -15,10 +15,15 @@ import {
   deleteVerificationCodesQuery,
   userWithPermissionsQuery,
 } from "./utils/queries/auth.js";
+import {
+  registrationError,
+  verificationError,
+} from "./utils/validation/auth.js";
 
 const authRouter = express.Router();
 
 const DEFAULT_REGISTRATION_ROLE = "Editor";
+const DUPLICATE_KEY = "23505";
 
 const transporter = nodemailer.createTransport({
   service: "gmail",
@@ -44,7 +49,12 @@ const sendVerificationEmail = async (email, code) => {
   }
 };
 
-authRouter.post("/register", async (req, res) => {
+authRouter.post("/register", async (req, res, next) => {
+  const payloadError = registrationError(req.body);
+  if (payloadError) {
+    return res.status(400).json({ error: payloadError });
+  }
+
   const { username, email, password } = req.body;
 
   try {
@@ -69,17 +79,16 @@ authRouter.post("/register", async (req, res) => {
 
     res.status(201).json({ message: "User registered", user: newUser });
   } catch (err) {
-    console.error(err);
-    if (err.code === "23505") {
+    if (err.code === DUPLICATE_KEY) {
       return res
         .status(409)
         .json({ error: "Username or email already exists" });
     }
-    res.status(500).json({ error: "Server error" });
+    next(err);
   }
 });
 
-authRouter.post("/login", async (req, res) => {
+authRouter.post("/login", async (req, res, next) => {
   const { username, password } = req.body;
 
   try {
@@ -113,17 +122,17 @@ authRouter.post("/login", async (req, res) => {
       dev_code: process.env.SKIP_EMAIL_VERIFICATION === "true" ? code : undefined,
     });
   } catch (err) {
-    console.error(err);
-    res.status(500).json({ error: "Server error" });
+    next(err);
   }
 });
 
-authRouter.post("/verify-2fa", async (req, res) => {
-  const { tempToken, code, rememberMe } = req.body;
-  
-  if (!tempToken) {
-    return res.status(400).json({ error: "Missing temporary token" });
+authRouter.post("/verify-2fa", async (req, res, next) => {
+  const payloadError = verificationError(req.body);
+  if (payloadError) {
+    return res.status(400).json({ error: payloadError });
   }
+
+  const { tempToken, code, rememberMe } = req.body;
   
   let userId;
   try {
@@ -181,8 +190,7 @@ authRouter.post("/verify-2fa", async (req, res) => {
       },
     });
   } catch (err) {
-    console.error(err);
-    res.status(500).json({ error: "Server error" });
+    next(err);
   }
 });
 
