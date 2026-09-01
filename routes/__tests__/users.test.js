@@ -49,9 +49,10 @@ describe('Users API', () => {
       expect(res.body.users).toHaveLength(2);
       expect(res.body.users[0]).toHaveProperty('id', mockUsers[0].id);
       expect(res.body.users[0]).toHaveProperty('username', mockUsers[0].username);
-      expect(mockQuery).toHaveBeenCalledWith(
-        expect.stringContaining('SELECT id, username'),
-      );
+      expect(mockQuery).toHaveBeenCalledWith({
+        text: expect.stringContaining('SELECT id, username'),
+        values: [],
+      });
     });
 
     it('should handle database errors', async () => {
@@ -85,7 +86,10 @@ describe('Users API', () => {
       expect(res.status).toBe(200);
       expect(res.body.users).toHaveLength(2);
       expect(res.body.users[0]).toHaveProperty('username', mockUsers[0].username);
-      expect(mockQuery).toHaveBeenCalledWith(expect.stringContaining('SELECT u.id'));
+      expect(mockQuery).toHaveBeenCalledWith({
+        text: expect.stringContaining('SELECT u.id'),
+        values: [],
+      });
     });
 
     it('should handle database errors', async () => {
@@ -121,7 +125,10 @@ describe('Users API', () => {
 
       expect(res.status).toBe(200);
       expect(res.body.user).toHaveProperty('username', mockUser.username);
-      expect(mockQuery).toHaveBeenCalledWith(expect.stringContaining('WHERE u.id = $1'), ['1']);
+      expect(mockQuery).toHaveBeenCalledWith({
+        text: expect.stringContaining('WHERE u.id = $1'),
+        values: ['1'],
+      });
     });
 
     it('should return 404 if user not found', async () => {

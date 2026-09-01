@@ -82,7 +82,7 @@ describe('Auth API', () => {
 
       await request(app).post('/register').send(userData);
       
-      expect(mockQuery.mock.calls[1][1][3]).toBe(viewerRoleId);
+      expect(mockQuery.mock.calls[1][0].values[3]).toBe(viewerRoleId);
     });
 
     it('should push the new user to every configured sub-app', async () => {

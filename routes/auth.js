@@ -6,8 +6,19 @@ import crypto from "crypto";
 import nodemailer from "nodemailer";
 import { authenticateToken } from "../middleware/authorize.js";
 import { syncUserToSubApps } from "../services/userSync.js";
+import {
+  roleIdByNameQuery,
+  insertUserQuery,
+  userByUsernameQuery,
+  insertVerificationCodeQuery,
+  activeVerificationCodeQuery,
+  deleteVerificationCodesQuery,
+  userWithPermissionsQuery,
+} from "./utils/queries/auth.js";
 
 const authRouter = express.Router();
+
+const DEFAULT_REGISTRATION_ROLE = "Editor";
 
 const transporter = nodemailer.createTransport({
   service: "gmail",
@@ -40,15 +51,17 @@ authRouter.post("/register", async (req, res) => {
     const salt = await bcrypt.genSalt(10);
     const hash = await bcrypt.hash(password, salt);
 
-    const roleRes = await pool.query(
-      "SELECT id FROM roles WHERE name = 'Editor'",
-    );
+    const role = roleIdByNameQuery(DEFAULT_REGISTRATION_ROLE);
+    const roleRes = await pool.query(role);
     const editorRoleId = roleRes.rows[0]?.id || 2;
 
-    const result = await pool.query(
-      "INSERT INTO users (username, email, password_hash, role_id) VALUES ($1, $2, $3, $4) RETURNING id, username, email",
-      [username, email, hash, editorRoleId],
-    );
+    const insert = insertUserQuery({
+      username,
+      email,
+      passwordHash: hash,
+      roleId: editorRoleId,
+    });
+    const result = await pool.query(insert);
 
     const newUser = result.rows[0];
 
@@ -70,9 +83,7 @@ authRouter.post("/login", async (req, res) => {
   const { username, password } = req.body;
 
   try {
-    const result = await pool.query("SELECT * FROM users WHERE username = $1", [
-      username,
-    ]);
+    const result = await pool.query(userByUsernameQuery(username));
     const user = result.rows[0];
 
     if (!user || !(await bcrypt.compare(password, user.password_hash))) {
@@ -82,10 +93,7 @@ authRouter.post("/login", async (req, res) => {
     const code = crypto.randomInt(100000, 999999).toString();
     const expiresAt = new Date(Date.now() + 10 * 60000);
 
-    await pool.query(
-      "INSERT INTO verification_codes (user_id, code, expires_at) VALUES ($1, $2, $3)",
-      [user.id, code, expiresAt],
-    );
+    await pool.query(insertVerificationCodeQuery(user.id, code, expiresAt));
 
     if (process.env.SKIP_EMAIL_VERIFICATION === "true") {
       console.log(`[DEV] Verification code for ${user.email}: ${code}`);
@@ -126,31 +134,15 @@ authRouter.post("/verify-2fa", async (req, res) => {
   }
   
   try {
-    const codeRes = await pool.query(
-      "SELECT * FROM verification_codes WHERE user_id = $1 AND code = $2 AND expires_at > NOW()",
-      [userId, code],
-    );
+    const codeRes = await pool.query(activeVerificationCodeQuery(userId, code));
 
     if (codeRes.rowCount === 0) {
       return res.status(400).json({ error: "Invalid or expired code" });
     }
 
-    await pool.query("DELETE FROM verification_codes WHERE user_id = $1", [
-      userId,
-    ]);
+    await pool.query(deleteVerificationCodesQuery(userId));
 
-    const userRes = await pool.query(
-      `
-        SELECT u.id, u.username, u.email, r.name as role, ARRAY_AGG(p.slug) as permissions
-        FROM users u
-        JOIN roles r ON u.role_id = r.id
-        LEFT JOIN role_permissions rp ON r.id = rp.role_id
-        LEFT JOIN permissions p ON rp.permission_id = p.id
-        WHERE u.id = $1
-        GROUP BY u.id, r.name
-      `,
-      [userId],
-    );
+    const userRes = await pool.query(userWithPermissionsQuery(userId));
 
     const user = userRes.rows[0];
 
