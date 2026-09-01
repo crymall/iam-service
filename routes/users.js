@@ -14,12 +14,12 @@ import {
   deleteUserQuery,
   updateUserRoleQuery,
 } from "./utils/queries/users.js";
-import { numericParam } from "./utils/validation/params.js";
+import { uuidParam } from "./utils/validation/params.js";
 import { roleChangeError } from "./utils/validation/users.js";
 
 const usersRouter = express.Router();
 
-usersRouter.param("id", numericParam("id"));
+usersRouter.param("id", uuidParam("id"));
 
 // Machine-readable user list for the sync-users backfill script in
 // midden-infra. Registered before /:id so "sync" isn't captured as an id.

@@ -14,6 +14,8 @@ jest.unstable_mockModule('../../middleware/authorize.js', () => ({
 const { default: app } = await import('../../app.js');
 const request = (await import('supertest')).default;
 
+const REAL_SHAPED_USER_ID = '11111111-1111-4111-8111-111111111111';
+
 const expectJsonError = (res, status) => {
   expect(res.status).toBe(status);
   expect(res.headers['content-type']).toMatch(/application\/json/);
@@ -33,9 +35,27 @@ describe('the request boundary', () => {
     jest.clearAllMocks();
   });
 
-  it('answers a non-numeric user id with 400 before reaching the database', async () => {
-    expectJsonError(await request(app).get('/users/notanid'), 400);
-    expect(mockQuery).not.toHaveBeenCalled();
+  it.each(['notanid', '1', 'c9f23723-296b'])(
+    'answers a malformed user id %p with 400 before reaching the database',
+    async (id) => {
+      expectJsonError(await request(app).get(`/users/${id}`), 400);
+      expect(mockQuery).not.toHaveBeenCalled();
+    },
+  );
+
+  it('lets a uuid through to the query, since iam user ids are uuids', async () => {
+    mockQuery.mockResolvedValueOnce({
+      rowCount: 1,
+      rows: [{ id: REAL_SHAPED_USER_ID, username: 'crymall', email: 'someone@example.com' }],
+    });
+
+    const res = await request(app).get(`/users/${REAL_SHAPED_USER_ID}`);
+
+    expect(res.status).toBe(200);
+    expect(res.body.user.email).toBe('someone@example.com');
+    expect(mockQuery).toHaveBeenCalledWith(
+      expect.objectContaining({ values: [REAL_SHAPED_USER_ID] }),
+    );
   });
 
   it('answers a malformed JSON body as JSON rather than HTML', async () => {
@@ -57,7 +77,9 @@ describe('the request boundary', () => {
   });
 
   it('answers PATCH /users/:id/role with no roleId as 400', async () => {
-    expectJsonError(await request(app).patch('/users/1/role').send({}), 400);
+    const res = await request(app).patch(`/users/${REAL_SHAPED_USER_ID}/role`).send({});
+    expectJsonError(res, 400);
+    expect(res.body.error).toBe('roleId is required');
     expect(mockQuery).not.toHaveBeenCalled();
   });
 
